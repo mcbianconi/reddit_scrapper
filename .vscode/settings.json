@@ -1,0 +1,5 @@
+{
+    "python.pythonPath": "/home/mcbianconi/.local/share/virtualenvs/reddit_speaker-I-kS-IDZ/bin/python",
+    "python.formatting.autopep8Args": ["--experimental"],
+    "terminal.integrated.fontFamily": "'RobotoMono Nerd Font'",
+}
