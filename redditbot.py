@@ -1,26 +1,16 @@
-import collections
-import concurrent.futures.process as process
-import concurrent.futures.thread as threads
-import glob
 import logging
 import os
 import shutil
 import subprocess
-import sys
 import time
-from functools import reduce
-from pprint import pprint
 
 import praw
-from mutagen.mp3 import MP3
 from prompt_toolkit import HTML, print_formatted_text, prompt
 from prompt_toolkit.validation import Validator
-from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
 from tqdm import tqdm
 
-from robot import config as config
-from robot import images, sounds, video
+from robot import config, images, sounds
 
 IMAGE_FILE_NAME = 'image_file_list.txt'
 AUDIO_FILE_NAME = 'audio_file_list.txt'
@@ -89,19 +79,6 @@ def order_comments_by_depth(comment_forest):
     return tuple(comments)
 
 
-def fetch_comment(comment: praw.models.Comment):
-    logging.info(f"Fetching comment {comment} in process {os.getpid()}")
-    submission_dir = os.path.join(
-        config.OUTPUT_DIR, comment.submission.fullname)
-    filename = os.path.join(
-        submission_dir, comment.fullname)
-    if not os.path.exists(filename + '.png'):
-        images.screenshot_comment(comment)
-    if not os.path.exists(filename + '.mp3'):
-        sounds.comment2mp3(comment)
-    return comment
-
-
 def fetch_submission(submission: praw.models.Submission):
 
     submission_dir = os.path.join(config.OUTPUT_DIR, submission.fullname)
@@ -154,13 +131,14 @@ def fetch_submission(submission: praw.models.Submission):
         for i, comment in enumerate(tqdm(comments)):
             try:
                 if video_length < 11 * 60:
-                    el = driver.find_element_by_id(comment.fullname)
+                    element = driver.find_element_by_id(comment.fullname)
                     driver.execute_script(
-                        "arguments[0].style.backgroundColor = 'azure'", el)
+                        "arguments[0].style.backgroundColor = 'azure'",
+                        element)
                     driver.execute_script(
                         "arguments[0].scrollIntoView({behavior: 'auto',block: 'center',inline: 'center'})",
-                        el)
-                    time.sleep(0.4)
+                        element)
+                    time.sleep(0.8)
 
                     comment_file_name = f'{str(i).zfill(3)}-{comment.fullname}'
 
@@ -168,7 +146,8 @@ def fetch_submission(submission: praw.models.Submission):
                         os.path.join(
                             submission_dir, comment_file_name+'.png'))
                     driver.execute_script(
-                        "arguments[0].style.backgroundColor = 'white'", el)
+                        "arguments[0].style.backgroundColor = 'white'",
+                        element)
 
                     audio = sounds.comment2mp3(comment, os.path.join(
                         submission_dir, comment_file_name+'.mp3'))
@@ -181,7 +160,7 @@ def fetch_submission(submission: praw.models.Submission):
 
                     video_length += audio.info.length
 
-            except NoSuchElementException as e:
+            except NoSuchElementException:
                 logging.debug(
                     f'Comment {comment.fullname} not found on page - Skipping')
 
@@ -200,31 +179,12 @@ def fetch_submission(submission: praw.models.Submission):
         "-vsync", "vfr", "-pix_fmt", "yuv420p", "-shortest", video_name]
 
     warn(cmnd)
-    p = subprocess.call(cmnd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    subprocess.call(cmnd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     info('Done!')
-    """
-    Comando para criar o video:
-    ffmpeg -f concat -safe 0 -i image_file_list.txt -f concat -safe 0 -i audio_file_list.txt -vsync vfr -pix_fmt yuv420p  output.mp4
-    """
 
 
-def comments_by_parent(comments):
-    def reducer(acc, val):
-        acc[val.parent_id].append(val)
-        return acc
-
-    comments_by_parent = reduce(
-        reducer,
-        comments,
-        collections.defaultdict(list)
-    )
-
-    return comments_by_parent
-
-
-def clean_files(submission):
-    submission_dir = os.path.join(config.OUTPUT_DIR, submission.fullname)
-    shutil.rmtree(submission_dir)
+def clean_files():
+    shutil.rmtree(config.OUTPUT_DIR)
 
 
 def initialize():
@@ -233,9 +193,8 @@ def initialize():
     info('Getting Hot Topics')
     submission = select_submission(REDDIT.front.hot(limit=25))
     fetch_submission(submission)
-    clean_files(submission)
+    clean_files()
 
 
 if __name__ == "__main__":
     initialize()
-    # video.test_video_creatin()
