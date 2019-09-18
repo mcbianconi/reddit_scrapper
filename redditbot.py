@@ -39,8 +39,8 @@ def warn(text):
 
 def select_submission(submission_list):
     options = {str(key): sub for key, sub in enumerate(submission_list)}
-    for k, v in options.items():
-        print_formatted_text(HTML(f'<red>{k}</red> {v.title}'))
+    for key, value in options.items():
+        print_formatted_text(HTML(f'<red>{key}</red> {value.title}'))
 
         validator = Validator.from_callable(
             lambda x: x in options.keys(),
@@ -162,7 +162,7 @@ def fetch_submission(submission: praw.models.Submission):
 
             except NoSuchElementException:
                 logging.debug(
-                    f'Comment {comment.fullname} not found on page - Skipping')
+                    'Comment %s not found on page - Skipping' % comment.fullname)
 
     finally:
         info('Done Processing Comments')
