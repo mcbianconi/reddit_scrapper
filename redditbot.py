@@ -1,16 +1,17 @@
 import collections
 import concurrent.futures.process as process
 import concurrent.futures.thread as threads
+import glob
 import logging
 import os
+import shutil
 import subprocess
+import sys
 import time
 from functools import reduce
 from pprint import pprint
-import glob
-import sys
+
 import praw
-import shutil
 from mutagen.mp3 import MP3
 from prompt_toolkit import HTML, print_formatted_text, prompt
 from prompt_toolkit.validation import Validator
@@ -152,36 +153,33 @@ def fetch_submission(submission: praw.models.Submission):
 
         for i, comment in enumerate(tqdm(comments)):
             try:
-                el = driver.find_element_by_id(comment.fullname)
-                driver.execute_script(
-                    "arguments[0].style.backgroundColor = 'azure'", el)
-                driver.execute_script(
-                    "arguments[0].scrollIntoView({behavior: 'auto',block: 'center',inline: 'center'})",
-                    el)
-                time.sleep(0.4)
+                if video_length < 11 * 60:
+                    el = driver.find_element_by_id(comment.fullname)
+                    driver.execute_script(
+                        "arguments[0].style.backgroundColor = 'azure'", el)
+                    driver.execute_script(
+                        "arguments[0].scrollIntoView({behavior: 'auto',block: 'center',inline: 'center'})",
+                        el)
+                    time.sleep(0.4)
 
-                comment_file_name = f'{str(i).zfill(3)}-{comment.fullname}'
+                    comment_file_name = f'{str(i).zfill(3)}-{comment.fullname}'
 
-                driver.save_screenshot(
-                    os.path.join(
-                        submission_dir, comment_file_name+'.png'))
-                driver.execute_script(
-                    "arguments[0].style.backgroundColor = 'white'", el)
+                    driver.save_screenshot(
+                        os.path.join(
+                            submission_dir, comment_file_name+'.png'))
+                    driver.execute_script(
+                        "arguments[0].style.backgroundColor = 'white'", el)
 
-                audio = sounds.comment2mp3(comment, os.path.join(
-                    submission_dir, comment_file_name+'.mp3'))
+                    audio = sounds.comment2mp3(comment, os.path.join(
+                        submission_dir, comment_file_name+'.mp3'))
 
-                audio_file.write(
-                    f"file '{submission_dir}/{comment_file_name}.mp3\nduration {audio.info.length}\n")
+                    audio_file.write(
+                        f"file '{submission_dir}/{comment_file_name}.mp3\nduration {audio.info.length}\n")
 
-                image_file.write(
-                    f"file '{submission_dir}/{comment_file_name}.png\nduration {audio.info.length}\n")
+                    image_file.write(
+                        f"file '{submission_dir}/{comment_file_name}.png\nduration {audio.info.length}\n")
 
-                video_length += audio.info.length
-
-                if video_length >= 11 * 60:
-                    warn('Max Video Lenght Reached')
-                    break
+                    video_length += audio.info.length
 
             except NoSuchElementException as e:
                 logging.debug(
@@ -199,23 +197,15 @@ def fetch_submission(submission: praw.models.Submission):
         "ffmpeg",
         "-f", "concat", "-safe", "0", "-i", f"{image_file_path}",
         "-f", "concat", "-safe", "0", "-i", f'{audio_file_path}',
-        "-vsync", "vfr", "-pix_fmt", "yuv420p", video_name]
+        "-vsync", "vfr", "-pix_fmt", "yuv420p", "-shortest", video_name]
 
     warn(cmnd)
     p = subprocess.call(cmnd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     info('Done!')
-    sys.exit()
     """
     Comando para criar o video:
     ffmpeg -f concat -safe 0 -i image_file_list.txt -f concat -safe 0 -i audio_file_list.txt -vsync vfr -pix_fmt yuv420p  output.mp4
     """
-#    #with process.ProcessPoolExecutor() as executor:
-#    warn(f'Screenshoting all comments - This may take a lot of time')
-#    with threads.ThreadPoolExecutor(config.NUM_THREADS) as executor:
-#        done = tuple(
-#            tqdm(
-#                executor.map(fetch_comment, root_comments),
-#                total=len(root_comments)))
 
 
 def comments_by_parent(comments):
@@ -231,9 +221,11 @@ def comments_by_parent(comments):
 
     return comments_by_parent
 
+
 def clean_files(submission):
     submission_dir = os.path.join(config.OUTPUT_DIR, submission.fullname)
     shutil.rmtree(submission_dir)
+
 
 def initialize():
     logging.basicConfig(level=logging.WARN)

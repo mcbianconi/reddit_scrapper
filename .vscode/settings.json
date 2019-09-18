@@ -1,6 +1,8 @@
 {
     "python.pythonPath": "/home/mcbianconi/.local/share/virtualenvs/reddit_speaker-I-kS-IDZ/bin/python",
-    "python.formatting.autopep8Args": ["--experimental"],
+    "python.formatting.autopep8Args": [
+        "--experimental"
+    ],
     "terminal.integrated.fontFamily": "'RobotoMono Nerd Font'",
     "files.exclude": {
         "**/.git": true,
@@ -9,6 +11,16 @@
         "**/CVS": true,
         "**/.DS_Store": true,
         "**/__pycache__": true
-        
-    }
+    },
+    "editor.formatOnSave": true,
+    "[python]": {
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": true
+        },
+    },
+    "python.linting.pylintEnabled": true,
+    "python.linting.pylintArgs": [
+        "--enable=W0614"
+    ],
+    "python.linting.enabled": true,
 }
