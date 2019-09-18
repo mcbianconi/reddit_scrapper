@@ -3,11 +3,15 @@ import concurrent.futures.process as process
 import concurrent.futures.thread as threads
 import logging
 import os
+import subprocess
 import time
 from functools import reduce
 from pprint import pprint
-from mutagen.mp3 import MP3
+import glob
+import sys
 import praw
+import shutil
+from mutagen.mp3 import MP3
 from prompt_toolkit import HTML, print_formatted_text, prompt
 from prompt_toolkit.validation import Validator
 from selenium import webdriver
@@ -99,7 +103,6 @@ def fetch_comment(comment: praw.models.Comment):
 
 def fetch_submission(submission: praw.models.Submission):
 
-    
     submission_dir = os.path.join(config.OUTPUT_DIR, submission.fullname)
     if not os.path.exists(submission_dir):
         os.mkdir(submission_dir)
@@ -109,17 +112,19 @@ def fetch_submission(submission: praw.models.Submission):
     submission.comments.replace_more(limit=None)
 
     comments = order_comments_by_depth(submission.comments.list())
-    #comments = tuple(submission.comments.list())
-    root_comments = tuple(filter(lambda c: c.is_root, comments))
 
     #warn(f'Got {len(comments)} comments')
-    warn(f'Got {len(root_comments)} ROOT comments')
+    warn(f'Got {len(comments)} comments')
 
     info(f'Creating AV Files')
 
     driver = images.driver()
-    image_file = open(os.path.join(submission_dir, IMAGE_FILE_NAME), "a+")
-    audio_file = open(os.path.join(submission_dir, AUDIO_FILE_NAME), "a+")
+
+    image_file_path = os.path.join(submission_dir, IMAGE_FILE_NAME)
+    image_file = open(image_file_path, "a+")
+
+    audio_file_path = os.path.join(submission_dir, AUDIO_FILE_NAME)
+    audio_file = open(audio_file_path, "a+")
 
     try:
         info(f'Fetching {submission} image and sound')
@@ -128,19 +133,22 @@ def fetch_submission(submission: praw.models.Submission):
         view_entire = driver.find_element_by_xpath(
             "//*[contains(text(), 'View entire')]")
         view_entire.click()
-        time.sleep(0.4)
+        time.sleep(1)
 
         info(f'Taking Submission Screenshot')
         submission_screenshot = os.path.join(
             submission_dir, submission.fullname + ".png")
         driver.save_screenshot(submission_screenshot)
-        
+
         info(f'Making Submission TTS')
         sub_audio = sounds.submission2mp3(submission)
         audio_file.write(
             f"file '{submission_dir}/{submission.fullname}.mp3\nduration {sub_audio.info.length}\n")
         image_file.write(
             f"file '{submission_dir}/{submission.fullname}.png\nduration {sub_audio.info.length}\n")
+
+        video_length = 0
+        video_length += sub_audio.info.length
 
         for i, comment in enumerate(tqdm(comments)):
             try:
@@ -162,26 +170,43 @@ def fetch_submission(submission: praw.models.Submission):
 
                 audio = sounds.comment2mp3(comment, os.path.join(
                     submission_dir, comment_file_name+'.mp3'))
+
                 audio_file.write(
                     f"file '{submission_dir}/{comment_file_name}.mp3\nduration {audio.info.length}\n")
 
                 image_file.write(
                     f"file '{submission_dir}/{comment_file_name}.png\nduration {audio.info.length}\n")
-                
+
+                video_length += audio.info.length
+
+                if video_length >= 11 * 60:
+                    warn('Max Video Lenght Reached')
+                    break
 
             except NoSuchElementException as e:
-                print(f'Element {comment.fullname} not found on page')
-            finally:
-                pass
-                #print(f'[SS] {i}/{len(comments)}')
+                logging.debug(
+                    f'Comment {comment.fullname} not found on page - Skipping')
 
     finally:
+        info('Done Processing Comments')
         image_file.close()
         audio_file.close()
         driver.quit()
 
+    info('Starting to make the video')
+    video_name = submission.title.replace(" ", "_") + '.mp4'
+    cmnd = [
+        "ffmpeg",
+        "-f", "concat", "-safe", "0", "-i", f"{image_file_path}",
+        "-f", "concat", "-safe", "0", "-i", f'{audio_file_path}',
+        "-vsync", "vfr", "-pix_fmt", "yuv420p", video_name]
+
+    warn(cmnd)
+    p = subprocess.call(cmnd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    info('Done!')
+    sys.exit()
     """
-    Comando para criar o video
+    Comando para criar o video:
     ffmpeg -f concat -safe 0 -i image_file_list.txt -f concat -safe 0 -i audio_file_list.txt -vsync vfr -pix_fmt yuv420p  output.mp4
     """
 #    #with process.ProcessPoolExecutor() as executor:
@@ -206,6 +231,9 @@ def comments_by_parent(comments):
 
     return comments_by_parent
 
+def clean_files(submission):
+    submission_dir = os.path.join(config.OUTPUT_DIR, submission.fullname)
+    shutil.rmtree(submission_dir)
 
 def initialize():
     logging.basicConfig(level=logging.WARN)
@@ -213,10 +241,7 @@ def initialize():
     info('Getting Hot Topics')
     submission = select_submission(REDDIT.front.hot(limit=25))
     fetch_submission(submission)
-
-    info(f'Creating Submission Video - This may take a lot of time')
-    video.create_submission_video(submission)
-    info(f'Done')
+    clean_files(submission)
 
 
 if __name__ == "__main__":
