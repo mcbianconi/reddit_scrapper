@@ -203,7 +203,7 @@ def initialize():
     submission = select_submission(REDDIT.subreddit('askReddit').hot(limit=25))
     submission_video = fetch_submission(submission)
     clean_files()
-    submission_video = '/tmp/Video.mp4'
+    # submission_video = '/tmp/Video.mp4'
 
     validator = Validator.from_callable(
         lambda x: os.path.exists(x),
