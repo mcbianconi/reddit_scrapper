@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -10,7 +11,7 @@ from prompt_toolkit.validation import Validator
 from selenium.common.exceptions import NoSuchElementException
 from tqdm import tqdm
 
-from robot import config, images, sounds
+from robot import config, images, sounds, video
 
 IMAGE_FILE_NAME = 'image_file_list.txt'
 AUDIO_FILE_NAME = 'audio_file_list.txt'
@@ -40,7 +41,8 @@ def warn(text):
 def select_submission(submission_list):
     options = {str(key): sub for key, sub in enumerate(submission_list)}
     for key, value in options.items():
-        print_formatted_text(HTML(f'<red>{key}</red> {value.title}'))
+        text = cleanhtml(value.title)
+        print_formatted_text(HTML(f'<red>{key}</red> {text}'))
 
         validator = Validator.from_callable(
             lambda x: x in options.keys(),
@@ -77,6 +79,12 @@ def order_comments_by_depth(comment_forest):
         if not isinstance(comment, praw.models.MoreComments):
             queue[0:0] = comment.replies
     return tuple(comments)
+
+
+def cleanhtml(raw_html):
+    cleanr = re.compile('<.*?>')
+    cleantext = re.sub(cleanr, '', raw_html)
+    return cleantext
 
 
 def fetch_submission(submission: praw.models.Submission):
@@ -181,6 +189,7 @@ def fetch_submission(submission: praw.models.Submission):
     warn(cmnd)
     subprocess.call(cmnd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     info('Done!')
+    return video_name
 
 
 def clean_files():
@@ -191,9 +200,18 @@ def initialize():
     logging.basicConfig(level=logging.WARN)
     _initialize_path()
     info('Getting Hot Topics')
-    submission = select_submission(REDDIT.front.hot(limit=25))
-    fetch_submission(submission)
+    submission = select_submission(REDDIT.subreddit('askReddit').hot(limit=25))
+    submission_video = fetch_submission(submission)
     clean_files()
+    submission_video = '/tmp/Video.mp4'
+
+    validator = Validator.from_callable(
+        lambda x: os.path.exists(x),
+        error_message="Not a valid path",
+    )
+    edition_folder = prompt('>>> Edition Folder: ', validator=validator)
+    # edition_folder = '/tmp/edit_videos'  # TEST PUPORSES
+    video.concat_videos(submission_video, edition_folder)
 
 
 if __name__ == "__main__":
